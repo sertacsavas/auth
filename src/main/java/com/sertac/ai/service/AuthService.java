@@ -22,9 +22,9 @@ import com.sertac.ai.model.exception.EmailSendingException;
 import com.sertac.ai.model.exception.TooManyRequestsException;
 import com.sertac.ai.model.exception.VerificationException;
 
+import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
 import java.security.Key;
 import java.util.Date;
@@ -104,28 +104,28 @@ public class AuthService {
     private String createJwtToken(String email) {
         long expirationTime = 1000 * 60 * 60 * 24; // 24 hours
         Date expirationDate = new Date(System.currentTimeMillis() + expirationTime);
-        Key key = Keys.hmacShaKeyFor(secretKey.getBytes());
+        Key key = Keys.hmacShaKeyFor(secretKey.getBytes(StandardCharsets.UTF_8));
 
         return Jwts.builder()
                 .setSubject(email)
                 .setIssuedAt(new Date())
                 .setExpiration(expirationDate)
-                .signWith(key, SignatureAlgorithm.HS256)
+                .signWith(key)
                 .compact();
     }
     
     private String createRefreshToken(String email) {
         String tokenId = UUID.randomUUID().toString();
-        long expirationTime = 1000 * 60 * 60 * 24 * 30; // 30 days
+        long expirationTime = 1000L * 60 * 60 * 24 * 30; // 30 days
         Date expirationDate = new Date(System.currentTimeMillis() + expirationTime);
-        Key key = Keys.hmacShaKeyFor(secretKey.getBytes());
+        Key key = Keys.hmacShaKeyFor(secretKey.getBytes(StandardCharsets.UTF_8));
 
         String token = Jwts.builder()
                 .setId(tokenId)
                 .setSubject(email)
                 .setIssuedAt(new Date())
                 .setExpiration(expirationDate)
-                .signWith(key, SignatureAlgorithm.HS256)
+                .signWith(key)
                 .compact();
 
         refreshTokenService.saveRefreshToken(tokenId, email, token, expirationDate);
@@ -213,6 +213,59 @@ public class AuthService {
         for (RefreshToken token : userTokens) {
             refreshTokenService.deactivateRefreshToken(token);
             refreshTokenService.blacklistToken(token.getToken());
+        }
+    }
+
+
+    public boolean validateAccessToken(String token) {
+        if (token == null || token.trim().isEmpty()) {
+            System.err.println("JWT token is null or empty");
+            return false;
+        }
+
+        try {
+            // Remove "Bearer " prefix if present
+            if (token.startsWith("Bearer ")) {
+                token = token.substring(7);
+            }
+            
+            // Remove any leading/trailing whitespace
+            token = token.trim();
+            
+            Key key = Keys.hmacShaKeyFor(secretKey.getBytes(StandardCharsets.UTF_8));
+            Jwts.parserBuilder()
+                .setSigningKey(key)
+                .build()
+                .parseClaimsJws(token);
+            return true;
+        } catch (IllegalArgumentException e) {
+            System.err.println("Invalid JWT format: " + e.getMessage());
+            return false;
+        } catch (JwtException e) {
+            System.err.println("JWT validation failed: " + e.getMessage());
+            return false;
+        }
+    }
+
+    public String getUserEmailFromToken(String token) {
+        // Remove "Bearer " prefix if present
+        if (token != null && token.startsWith("Bearer ")) {
+            token = token.substring(7);
+        }
+        if (!validateAccessToken(token)) {
+            throw new AuthenticationException("Invalid token");
+        }
+
+        try {
+            Key key = Keys.hmacShaKeyFor(secretKey.getBytes());
+            Claims claims = Jwts.parserBuilder()
+                .setSigningKey(key)
+                .build()
+                .parseClaimsJws(token)
+                .getBody();
+            return claims.getSubject();
+        } catch (JwtException e) {
+            throw new AuthenticationException("Failed to extract email from token", e);
         }
     }
 }
