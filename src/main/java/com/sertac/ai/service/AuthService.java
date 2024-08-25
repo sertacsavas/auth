@@ -39,6 +39,8 @@ public class AuthService {
     private final String secretKey;
     private final UserService userService;
     private final RefreshTokenService refreshTokenService;
+    @Value("${app.domain}")
+    private String appDomain;
 
     public AuthService(VerificationCodeService verificationCodeService, 
                        JavaMailSender emailSender, 
@@ -61,7 +63,16 @@ public class AuthService {
         String code = verificationCodeService.generateVerificationCode();
         VerificationCode verificationCode = new VerificationCode(request.getEmail(), code);
         verificationCodeService.saveVerificationCode(verificationCode);
-        sendEmail(request.getEmail(), "Verification Code", "Your verification code is: " + code);
+        
+        String loginUrl = "https://" + appDomain + "/login";
+        String emailBody = String.format(
+            "Your verification code is: %s\n\n" +
+            "Please use this code to log in at: %s\n\n" +
+            "If you didn't request this code, please ignore this email.",
+            code, loginUrl
+        );
+        
+        sendEmail(request.getEmail(), "Verification Code for " + appDomain, emailBody);
         return new SendVerificationCodeResponse(true, "Verification code sent successfully");
     }
     

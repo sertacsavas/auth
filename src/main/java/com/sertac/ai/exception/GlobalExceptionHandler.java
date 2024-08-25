@@ -28,7 +28,13 @@ public class GlobalExceptionHandler {
         String requestInfo = String.format("Method: %s, URI: %s, Query Params: %s, Body: %s, IP: %s",
                 request.getMethod(), request.getRequestURI(), queryParams, body, ipAddress);
         logger.error("An error occurred during request [{}]: {}", requestInfo, e.getMessage(), e);
-        return new ResponseEntity<>("An error occurred", HttpStatus.INTERNAL_SERVER_ERROR);
+
+        // Check if the exception is a RuntimeException
+        if (e instanceof RuntimeException) {
+            return new ResponseEntity<>(e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
+        } else {
+            return new ResponseEntity<>("An error occurred", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
     }
 
     private String getRequestBody(HttpServletRequest request) {
