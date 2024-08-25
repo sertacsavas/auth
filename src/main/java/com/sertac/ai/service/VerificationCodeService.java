@@ -67,6 +67,8 @@ public class VerificationCodeService {
         VerificationCode verificationCode = verificationCodeOpt.get();
         boolean isValid = verificationCode.getCode().equals(code);
         if (isValid) {
+            verificationCode.setStatus(VerificationCodeStatus.USED);
+            verificationCodeRepository.save(verificationCode);
             resetAttempts(email);
         } else {
             incrementAttempt(email);
@@ -104,7 +106,7 @@ public class VerificationCodeService {
 
     public void deactivateVerificationCode(String email) {
         List<VerificationCode> activeCodes = verificationCodeRepository.findAllByEmailAndStatus(email, VerificationCodeStatus.ACTIVE);
-        activeCodes.forEach(code -> code.setStatus(VerificationCodeStatus.USED));
+        activeCodes.forEach(code -> code.setStatus(VerificationCodeStatus.INACTIVE));
         verificationCodeRepository.saveAll(activeCodes);
     }
 
@@ -122,10 +124,14 @@ public class VerificationCodeService {
         attemptCounter.entrySet().removeIf(entry -> !lockoutTime.containsKey(entry.getKey()));
     }
 
-    public boolean hasRecentVerificationCode(String email) {
-        LocalDateTime recentTime = LocalDateTime.now().minusMinutes(5); // Consider codes sent in the last 5 minutes
-        List<VerificationCode> recentCodes = verificationCodeRepository.findAllByEmailAndCreatedAtAfter(email, recentTime);
-        return !recentCodes.isEmpty();
+
+    public boolean hasRecentActiveVerificationCode(String email) {
+        // Define the time threshold (e.g., 5 minutes ago)
+        LocalDateTime fiveMinutesAgo = LocalDateTime.now().minusMinutes(5);
+        
+        // Check for recent active verification codes
+        return verificationCodeRepository.existsByEmailAndCreatedAtAfterAndStatus(
+            email, fiveMinutesAgo, VerificationCodeStatus.ACTIVE);
     }
 
 }

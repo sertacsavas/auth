@@ -23,8 +23,8 @@ public interface VerificationCodeRepository extends JpaRepository<VerificationCo
 
     List<VerificationCode> findAllByEmailAndStatus(String email, VerificationCodeStatus status);
 
-    List<VerificationCode> findAllByEmailAndCreatedAtAfter(String email, LocalDateTime recentTime);
-
     List<VerificationCode> findAllByExpirationTimeBeforeAndStatus(LocalDateTime expirationTime,
             VerificationCodeStatus active);
+
+    boolean existsByEmailAndCreatedAtAfterAndStatus(String email, LocalDateTime createdAt, VerificationCodeStatus status);
 }

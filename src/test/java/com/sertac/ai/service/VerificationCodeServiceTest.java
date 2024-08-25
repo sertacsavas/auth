@@ -11,7 +11,6 @@ import org.mockito.MockitoAnnotations;
 
 import java.time.LocalDateTime;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
@@ -103,25 +102,31 @@ class VerificationCodeServiceTest {
     }
 
     @Test
-    void deactivateVerificationCode_shouldChangeStatusToUsed() {
+    void deactivateVerificationCode_shouldChangeStatusToInactive() {
+        // Arrange
         String email = "test@example.com";
-        VerificationCode activeCode1 = new VerificationCode(email, "123456");
-        VerificationCode activeCode2 = new VerificationCode(email, "654321");
-        activeCode1.setStatus(VerificationCodeStatus.ACTIVE);
-        activeCode2.setStatus(VerificationCodeStatus.ACTIVE);
+        VerificationCode code1 = new VerificationCode();
+        code1.setEmail(email);
+        code1.setStatus(VerificationCodeStatus.ACTIVE);
+        VerificationCode code2 = new VerificationCode();
+        code2.setEmail(email);
+        code2.setStatus(VerificationCodeStatus.ACTIVE);
+        List<VerificationCode> activeCodes = Arrays.asList(code1, code2);
 
         when(verificationCodeRepository.findAllByEmailAndStatus(email, VerificationCodeStatus.ACTIVE))
-            .thenReturn(List.of(activeCode1, activeCode2));
+            .thenReturn(activeCodes);
 
+        // Act
         verificationCodeService.deactivateVerificationCode(email);
 
-        verify(verificationCodeRepository).saveAll(argThat(codes -> {
-            List<VerificationCode> codeList = (List<VerificationCode>) codes;
-            return codeList.size() == 2 &&
-                   codeList.stream().allMatch(vc -> vc.getStatus() == VerificationCodeStatus.USED);
-        }));
-    }
+        // Assert
+        verify(verificationCodeRepository).findAllByEmailAndStatus(email, VerificationCodeStatus.ACTIVE);
+        verify(verificationCodeRepository).saveAll(activeCodes);
 
+        for (VerificationCode code : activeCodes) {
+            assertEquals(VerificationCodeStatus.INACTIVE, code.getStatus());
+        }
+    }
 
     @Test
     void testGenerateVerificationCode() {
@@ -228,20 +233,47 @@ class VerificationCodeServiceTest {
     }
 
     @Test
-    void testHasRecentVerificationCode_True() {
+    void testHasRecentActiveVerificationCode_True() {
         String email = "test@example.com";
-        when(verificationCodeRepository.findAllByEmailAndCreatedAtAfter(eq(email), any(LocalDateTime.class)))
-            .thenReturn(Arrays.asList(new VerificationCode()));
+        VerificationCode recentCode = new VerificationCode();
+        recentCode.setEmail(email);
+        recentCode.setCreatedAt(LocalDateTime.now().minusMinutes(4));
+        recentCode.setStatus(VerificationCodeStatus.ACTIVE);
 
-        assertTrue(verificationCodeService.hasRecentVerificationCode(email));
+        when(verificationCodeRepository.existsByEmailAndCreatedAtAfterAndStatus(
+            eq(email), 
+            any(LocalDateTime.class), 
+            eq(VerificationCodeStatus.ACTIVE)))
+            .thenReturn(true);
+
+        assertTrue(verificationCodeService.hasRecentActiveVerificationCode(email));
     }
 
     @Test
-    void testHasRecentVerificationCode_False() {
+    void testHasRecentActiveVerificationCode_False() {
         String email = "test@example.com";
-        when(verificationCodeRepository.findAllByEmailAndCreatedAtAfter(eq(email), any(LocalDateTime.class)))
-            .thenReturn(Collections.emptyList());
+        
+        // Case 1: No recent code
+        when(verificationCodeRepository.existsByEmailAndCreatedAtAfterAndStatus(
+            eq(email), 
+            any(LocalDateTime.class), 
+            eq(VerificationCodeStatus.ACTIVE)))
+            .thenReturn(false);
+        
+        assertFalse(verificationCodeService.hasRecentActiveVerificationCode(email));
 
-        assertFalse(verificationCodeService.hasRecentVerificationCode(email));
+        // Case 2: Code exists but is older than 5 minutes
+        VerificationCode oldCode = new VerificationCode();
+        oldCode.setEmail(email);
+        oldCode.setCreatedAt(LocalDateTime.now().minusMinutes(6));
+        oldCode.setStatus(VerificationCodeStatus.ACTIVE);
+
+        when(verificationCodeRepository.existsByEmailAndCreatedAtAfterAndStatus(
+            eq(email), 
+            any(LocalDateTime.class), 
+            eq(VerificationCodeStatus.ACTIVE)))
+            .thenReturn(false);
+
+        assertFalse(verificationCodeService.hasRecentActiveVerificationCode(email));
     }
 }

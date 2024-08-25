@@ -30,6 +30,8 @@ import java.security.Key;
 import java.util.Date;
 import java.util.List;
 import java.util.UUID;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 @Service
 @Transactional
@@ -56,18 +58,24 @@ public class AuthService {
     
     
     public SendVerificationCodeResponse sendVerificationCode(SendVerificationCodeRequest request) {
-        if (verificationCodeService.hasRecentVerificationCode(request.getEmail())) {
+        // Check for recent active verification codes, excluding USED ones
+        if (verificationCodeService.hasRecentActiveVerificationCode(request.getEmail())) {
             throw new TooManyRequestsException("Please wait before requesting a new code");
         }
+        
+        // Deactivate any existing verification codes
         verificationCodeService.deactivateVerificationCode(request.getEmail());
+        
+        // Generate and save new verification code
         String code = verificationCodeService.generateVerificationCode();
         VerificationCode verificationCode = new VerificationCode(request.getEmail(), code);
         verificationCodeService.saveVerificationCode(verificationCode);
         
-        String loginUrl = "https://" + appDomain + "/login";
+        String encodedEmail = URLEncoder.encode(request.getEmail(), StandardCharsets.UTF_8);
+        String loginUrl = "http://" + appDomain + "/verify?email=" + encodedEmail;
         String emailBody = String.format(
             "Your verification code is: %s\n\n" +
-            "Please use this code to log in at: %s\n\n" +
+            "Please use this code to verify your email at: %s\n\n" +
             "If you didn't request this code, please ignore this email.",
             code, loginUrl
         );
@@ -86,7 +94,7 @@ public class AuthService {
             
             String accessToken = createJwtToken(verifyCodeRequest.getEmail());
             String refreshToken = createRefreshToken(verifyCodeRequest.getEmail());
-            verificationCodeService.deactivateVerificationCode(verifyCodeRequest.getEmail());
+            
             return new VerifyCodeResponse(accessToken, refreshToken);
         } else {
             throw new VerificationException("Invalid verification code");

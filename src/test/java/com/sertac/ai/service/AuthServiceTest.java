@@ -91,6 +91,7 @@ class AuthServiceTest {
         String code = "123456";
 
         when(verificationCodeService.verifyCode(email, code)).thenReturn(true);
+        when(userService.findByEmail(email)).thenReturn(new User(email));
 
         VerifyCodeRequest request = new VerifyCodeRequest(email, code);
         VerifyCodeResponse response = authService.verifyCode(request);
@@ -98,7 +99,7 @@ class AuthServiceTest {
         assertNotNull(response);
         assertNotNull(response.getAccessToken());
         assertNotNull(response.getRefreshToken());
-        verify(verificationCodeService).deactivateVerificationCode(email);
+        verify(verificationCodeService).verifyCode(email, code);
     }
 
     @Test
@@ -137,13 +138,12 @@ class AuthServiceTest {
 
         assertEquals(email, claims.getSubject());
         assertTrue(claims.getExpiration().after(new Date()));
-        verify(verificationCodeService).deactivateVerificationCode(email);
     }
 
     @Test
     void sendVerificationCode_Success() {
         SendVerificationCodeRequest request = new SendVerificationCodeRequest("test@example.com");
-        when(verificationCodeService.hasRecentVerificationCode(anyString())).thenReturn(false);
+        when(verificationCodeService.hasRecentActiveVerificationCode(anyString())).thenReturn(false);
         when(verificationCodeService.generateVerificationCode()).thenReturn("123456");
 
         SendVerificationCodeResponse response = authService.sendVerificationCode(request);
@@ -157,7 +157,7 @@ class AuthServiceTest {
     @Test
     void sendVerificationCode_TooManyRequests() {
         SendVerificationCodeRequest request = new SendVerificationCodeRequest("test@example.com");
-        when(verificationCodeService.hasRecentVerificationCode(anyString())).thenReturn(true);
+        when(verificationCodeService.hasRecentActiveVerificationCode(anyString())).thenReturn(true);
 
         assertThrows(TooManyRequestsException.class, () -> authService.sendVerificationCode(request));
     }
@@ -173,7 +173,6 @@ class AuthServiceTest {
         assertNotNull(response.getAccessToken());
         assertNotNull(response.getRefreshToken());
         verify(userService).createUser(any(User.class));
-        verify(verificationCodeService).deactivateVerificationCode(anyString());
     }
 
     @Test
@@ -187,7 +186,6 @@ class AuthServiceTest {
         assertNotNull(response.getAccessToken());
         assertNotNull(response.getRefreshToken());
         verify(userService, never()).createUser(any(User.class));
-        verify(verificationCodeService).deactivateVerificationCode(anyString());
     }
 
     @Test
