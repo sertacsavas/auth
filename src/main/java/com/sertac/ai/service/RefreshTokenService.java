@@ -1,6 +1,7 @@
 package com.sertac.ai.service;
 
 import java.util.Date;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.stereotype.Service;
@@ -38,5 +39,22 @@ public class RefreshTokenService {
         RefreshToken refreshToken = refreshTokenRepository.findByToken(token)
                 .orElseThrow(() -> new AuthenticationException("Refresh token not found"));
         deactivateRefreshToken(refreshToken);
+    }
+
+    public void blacklistToken(String token) {
+        RefreshToken refreshToken = findByToken(token)
+            .orElseThrow(() -> new AuthenticationException("Token not found"));
+        refreshToken.setStatus(RefreshTokenStatus.BLACKLISTED);
+        refreshTokenRepository.save(refreshToken);
+    }
+
+    public boolean isTokenBlacklisted(String token) {
+        return findByToken(token)
+            .map(t -> RefreshTokenStatus.BLACKLISTED.equals(t.getStatus()))
+            .orElse(false);
+    }
+
+    public List<RefreshToken> findActiveTokensByEmail(String email) {
+        return refreshTokenRepository.findByEmailAndStatus(email, RefreshTokenStatus.ACTIVE);
     }
 }

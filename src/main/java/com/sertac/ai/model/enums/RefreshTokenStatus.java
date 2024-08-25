@@ -4,5 +4,6 @@ public enum RefreshTokenStatus {
     ACTIVE,
     EXPIRED,
     REVOKED,
-    INACTIVE
+    INACTIVE, 
+    BLACKLISTED
 }

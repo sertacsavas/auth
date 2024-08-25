@@ -27,6 +27,7 @@ import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
 import java.security.Key;
 import java.util.Date;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -133,8 +134,8 @@ public class AuthService {
         String newAccessToken = createJwtToken(email);
         String newRefreshToken = createRefreshToken(email);
 
-        // Mark the old refresh token as inactive
         refreshTokenService.deactivateRefreshToken(refreshToken);
+        refreshTokenService.blacklistToken(refreshTokenString);
 
         return new RefreshTokenResponse(newAccessToken, newRefreshToken);
     }
@@ -142,6 +143,10 @@ public class AuthService {
     private RefreshToken validateAndGetRefreshToken(String refreshTokenString) {
         if (refreshTokenString == null || refreshTokenString.isEmpty()) {
             throw new AuthenticationException("Refresh token is missing or empty");
+        }
+
+        if (refreshTokenService.isTokenBlacklisted(refreshTokenString)) {
+            throw new AuthenticationException("Refresh token is blacklisted");
         }
 
         RefreshToken refreshToken = refreshTokenService.findByToken(refreshTokenString)
@@ -180,5 +185,14 @@ public class AuthService {
 
     public void revokeRefreshToken(String refreshToken) {
         refreshTokenService.revokeRefreshToken(refreshToken);
+        refreshTokenService.blacklistToken(refreshToken);
+    }
+
+    public void revokeAllUserRefreshTokens(String email) {
+        List<RefreshToken> userTokens = refreshTokenService.findActiveTokensByEmail(email);
+        for (RefreshToken token : userTokens) {
+            refreshTokenService.deactivateRefreshToken(token);
+            refreshTokenService.blacklistToken(token.getToken());
+        }
     }
 }
