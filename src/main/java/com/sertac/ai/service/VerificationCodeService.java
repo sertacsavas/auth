@@ -4,6 +4,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.sertac.ai.email.EmailUtils;
 import com.sertac.ai.model.entity.VerificationCode;
 import com.sertac.ai.model.enums.VerificationCodeStatus;
 import com.sertac.ai.repository.VerificationCodeRepository;
@@ -38,7 +39,7 @@ public class VerificationCodeService {
 
     public void saveVerificationCode(VerificationCode verificationCode) {
         // Check if email is valid
-        if (!isValidEmail(verificationCode.getEmail())) {
+        if (!EmailUtils.isValidEmail(verificationCode.getEmail())) {
             throw new IllegalArgumentException("Invalid email format");
         }
 
@@ -50,11 +51,7 @@ public class VerificationCodeService {
         verificationCodeRepository.save(verificationCode);
     }
 
-    private boolean isValidEmail(String email) {
-    // Simple email validation regex
-    String emailRegex = "^[A-Za-z0-9+_.-]+@(.+)$";
-    return email != null && email.matches(emailRegex);
-    }
+
 
     public boolean verifyCode(String email, String code) {
         if (isLocked(email)) {

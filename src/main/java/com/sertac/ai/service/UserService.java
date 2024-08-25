@@ -3,6 +3,7 @@ package com.sertac.ai.service;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.sertac.ai.email.EmailUtils;
 import com.sertac.ai.model.entity.User;
 import com.sertac.ai.repository.UserRepository;
 
@@ -28,7 +29,7 @@ public class UserService {
         }
 
         // Check if email is valid
-        if (!isValidEmail(user.getEmail())) {
+        if (!EmailUtils.isValidEmail(user.getEmail())) {
             throw new IllegalArgumentException("Invalid email format");
         }
 
@@ -41,18 +42,14 @@ public class UserService {
         return userRepository.save(user);
     }
 
-    private boolean isValidEmail(String email) {
-        // Simple email validation regex
-        String emailRegex = "^[A-Za-z0-9+_.-]+@(.+)$";
-        return email.matches(emailRegex);
-    }
+
 
     public User findByEmail(String email) {
         if (email == null || email.trim().isEmpty()) {
             throw new IllegalArgumentException("Email cannot be null or empty");
         }
         
-        if (!isValidEmail(email)) {
+        if (!EmailUtils.isValidEmail(email)) {
             throw new IllegalArgumentException("Invalid email format");
         }
         
