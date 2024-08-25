@@ -10,7 +10,7 @@ public class VerifyCodeResponse {
     }
 
     public VerifyCodeResponse() {
-        //TODO Auto-generated constructor stub
+        super();
     }
 
     public String getAccessToken() {

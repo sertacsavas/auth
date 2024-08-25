@@ -9,7 +9,7 @@ public class SendVerificationCodeResponse {
     }
 
     public SendVerificationCodeResponse() {
-        //TODO Auto-generated constructor stub
+        super();
     }
 
     public String getMessage() {
