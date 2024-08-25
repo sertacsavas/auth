@@ -9,6 +9,10 @@ public class VerifyCodeResponse {
         this.refreshToken = refreshToken;
     }
 
+    public VerifyCodeResponse() {
+        //TODO Auto-generated constructor stub
+    }
+
     public String getAccessToken() {
         return accessToken;
     }

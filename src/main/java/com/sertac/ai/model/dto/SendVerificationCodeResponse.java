@@ -8,6 +8,10 @@ public class SendVerificationCodeResponse {
         this.message = message;
     }
 
+    public SendVerificationCodeResponse() {
+        //TODO Auto-generated constructor stub
+    }
+
     public String getMessage() {
         return message;
     }
