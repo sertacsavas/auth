@@ -15,6 +15,7 @@ import com.sertac.ai.model.dto.SendVerificationCodeResponse;
 import com.sertac.ai.model.dto.VerifyCodeRequest;
 import com.sertac.ai.model.entity.User;
 import com.sertac.ai.model.entity.VerificationCode;
+import com.sertac.ai.model.enums.RefreshTokenStatus;
 import com.sertac.ai.model.entity.RefreshToken;
 import com.sertac.ai.model.exception.AuthenticationException;
 import com.sertac.ai.model.exception.EmailSendingException;
@@ -152,7 +153,7 @@ public class AuthService {
         RefreshToken refreshToken = refreshTokenService.findByToken(refreshTokenString)
                 .orElseThrow(() -> new AuthenticationException("Refresh token not found"));
 
-        if (!"ACTIVE".equals(refreshToken.getStatus())) {
+        if (!RefreshTokenStatus.ACTIVE.equals(refreshToken.getStatus())) {
             throw new AuthenticationException("Refresh token is inactive");
         }
 
