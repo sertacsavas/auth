@@ -15,18 +15,19 @@ import com.sertac.ai.model.dto.SendVerificationCodeResponse;
 import com.sertac.ai.model.dto.VerifyCodeRequest;
 import com.sertac.ai.model.entity.User;
 import com.sertac.ai.model.entity.VerificationCode;
+import com.sertac.ai.model.entity.RefreshToken;
 import com.sertac.ai.model.exception.AuthenticationException;
 import com.sertac.ai.model.exception.EmailSendingException;
 import com.sertac.ai.model.exception.TooManyRequestsException;
 import com.sertac.ai.model.exception.VerificationException;
 
-import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
 import java.security.Key;
 import java.util.Date;
+import java.util.UUID;
 
 @Service
 @Transactional
@@ -35,15 +36,18 @@ public class AuthService {
     private final JavaMailSender emailSender;
     private final String secretKey;
     private final UserService userService;
+    private final RefreshTokenService refreshTokenService;
 
     public AuthService(VerificationCodeService verificationCodeService, 
                        JavaMailSender emailSender, 
                        @Value("${auth.secret-key}") String secretKey,
-                       UserService userService) {
+                       UserService userService,
+                       RefreshTokenService refreshTokenService) {
         this.verificationCodeService = verificationCodeService;
         this.emailSender = emailSender;
         this.secretKey = secretKey;
         this.userService = userService;
+        this.refreshTokenService = refreshTokenService;
     }
     
     
@@ -67,9 +71,10 @@ public class AuthService {
                 userService.createUser(new User(verifyCodeRequest.getEmail()));
             }
             
-            String token = createJwtToken(verifyCodeRequest.getEmail());
+            String accessToken = createJwtToken(verifyCodeRequest.getEmail());
+            String refreshToken = createRefreshToken(verifyCodeRequest.getEmail());
             verificationCodeService.deactivateVerificationCode(verifyCodeRequest.getEmail());
-            return new VerifyCodeResponse(token);
+            return new VerifyCodeResponse(accessToken, refreshToken);
         } else {
             throw new VerificationException("Invalid verification code");
         }
@@ -88,40 +93,81 @@ public class AuthService {
                 .compact();
     }
     
-private void sendEmail(String to, String subject, String text) {
-    try {
-        SimpleMailMessage message = new SimpleMailMessage();
-        message.setTo(to);
-        message.setSubject(subject);
-        message.setText(text);
-        emailSender.send(message);
-    } catch (MailException e) {
-        // Log the error
-        throw new EmailSendingException("Failed to send verification email", e);
+    private String createRefreshToken(String email) {
+        String tokenId = UUID.randomUUID().toString();
+        long expirationTime = 1000 * 60 * 60 * 24 * 30; // 30 days
+        Date expirationDate = new Date(System.currentTimeMillis() + expirationTime);
+        Key key = Keys.hmacShaKeyFor(secretKey.getBytes());
+
+        String token = Jwts.builder()
+                .setId(tokenId)
+                .setSubject(email)
+                .setIssuedAt(new Date())
+                .setExpiration(expirationDate)
+                .signWith(key, SignatureAlgorithm.HS256)
+                .compact();
+
+        refreshTokenService.saveRefreshToken(tokenId, email, token, expirationDate);
+
+        return token;
     }
-}
+    private void sendEmail(String to, String subject, String text) {
+        try {
+            SimpleMailMessage message = new SimpleMailMessage();
+            message.setTo(to);
+            message.setSubject(subject);
+            message.setText(text);
+            emailSender.send(message);
+        } catch (MailException e) {
+            // Log the error
+            throw new EmailSendingException("Failed to send verification email", e);
+        }
+    }
 
     public RefreshTokenResponse refreshToken(RefreshTokenRequest request) {
-        validateRefreshToken(request.getRefreshToken());
-        String email = decodeRefreshToken(request.getRefreshToken());
+        String refreshTokenString = request.getRefreshToken();
+        RefreshToken refreshToken = validateAndGetRefreshToken(refreshTokenString);
+        String email = refreshToken.getEmail();
         getUserOrThrow(email);
+
         String newAccessToken = createJwtToken(email);
-        return new RefreshTokenResponse(newAccessToken);
+        String newRefreshToken = createRefreshToken(email);
+
+        // Mark the old refresh token as inactive
+        refreshTokenService.deactivateRefreshToken(refreshToken);
+
+        return new RefreshTokenResponse(newAccessToken, newRefreshToken);
     }
 
-    private void validateRefreshToken(String refreshToken) {
-        if (refreshToken == null || refreshToken.isEmpty()) {
+    private RefreshToken validateAndGetRefreshToken(String refreshTokenString) {
+        if (refreshTokenString == null || refreshTokenString.isEmpty()) {
             throw new AuthenticationException("Refresh token is missing or empty");
         }
+
+        RefreshToken refreshToken = refreshTokenService.findByToken(refreshTokenString)
+                .orElseThrow(() -> new AuthenticationException("Refresh token not found"));
+
+        if (!"ACTIVE".equals(refreshToken.getStatus())) {
+            throw new AuthenticationException("Refresh token is inactive");
+        }
+
+        if (refreshToken.getExpiryDate().before(new Date())) {
+            refreshTokenService.deactivateRefreshToken(refreshToken);
+            throw new AuthenticationException("Refresh token has expired");
+        }
+
         try {
             Key key = Keys.hmacShaKeyFor(secretKey.getBytes());
             Jwts.parserBuilder()
                 .setSigningKey(key)
                 .build()
-                .parseClaimsJws(refreshToken);
+                .parseClaimsJws(refreshTokenString);
         } catch (JwtException e) {
+            refreshTokenService.deactivateRefreshToken(refreshToken);
             throw new AuthenticationException("Invalid refresh token", e);
         }
+
+        return refreshToken;
     }
 
     private User getUserOrThrow(String email) {
@@ -132,18 +178,7 @@ private void sendEmail(String to, String subject, String text) {
         return user;
     }
 
-    private String decodeRefreshToken(String refreshToken) {
-        Key key = Keys.hmacShaKeyFor(secretKey.getBytes());
-        Claims claims = Jwts.parserBuilder()
-                .setSigningKey(key)
-                .build()
-                .parseClaimsJws(refreshToken)
-                .getBody();
-        String email = claims.getSubject();
-        if (email == null || email.isEmpty()) {
-            throw new AuthenticationException("Email not found in refresh token");
-        }
-        return email;
-
+    public void revokeRefreshToken(String refreshToken) {
+        refreshTokenService.revokeRefreshToken(refreshToken);
     }
 }

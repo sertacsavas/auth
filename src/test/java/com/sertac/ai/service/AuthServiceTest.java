@@ -1,18 +1,20 @@
 package com.sertac.ai.service;
 
-import com.sertac.ai.model.dto.VerifyCodeResponse;
 import com.sertac.ai.model.dto.SendVerificationCodeRequest;
 import com.sertac.ai.model.dto.VerifyCodeRequest;
+import com.sertac.ai.model.dto.VerifyCodeResponse;
 import com.sertac.ai.model.entity.VerificationCode;
 import com.sertac.ai.model.exception.VerificationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.mockito.ArgumentCaptor;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 import io.jsonwebtoken.Claims;
@@ -32,13 +34,16 @@ class AuthServiceTest {
     @Mock
     private UserService userService;
 
+    @Mock
+    private RefreshTokenService refreshTokenService;
+
     private static final String SECRET_KEY = "yourVeryLongAndSecureSecretKeyHere";
     private AuthService authService;
 
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        authService = new AuthService(verificationCodeService, emailSender, SECRET_KEY,userService);
+        authService = new AuthService(verificationCodeService, emailSender, SECRET_KEY,userService,refreshTokenService);
     }
 
     @Test
@@ -54,6 +59,18 @@ class AuthServiceTest {
         verify(verificationCodeService).generateVerificationCode();
         verify(verificationCodeService).saveVerificationCode(any(VerificationCode.class));
         verify(emailSender).send(any(SimpleMailMessage.class));
+
+        ArgumentCaptor<SimpleMailMessage> messageCaptor = ArgumentCaptor.forClass(SimpleMailMessage.class);
+        verify(emailSender).send(messageCaptor.capture());
+        
+        SimpleMailMessage sentMessage = messageCaptor.getValue();
+        String[] recipients = sentMessage.getTo();
+        assertNotNull(recipients);
+        assertEquals(email, recipients[0]);
+        assertNotNull(sentMessage.getText());
+        String messageText = sentMessage.getText();
+        assertNotNull(messageText);
+        assertTrue(messageText.contains(code));
     }
 
     @Test
@@ -67,7 +84,8 @@ class AuthServiceTest {
         VerifyCodeResponse response = authService.verifyCode(request);
 
         assertNotNull(response);
-        assertNotNull(response.getToken());
+        assertNotNull(response.getAccessToken());
+        assertNotNull(response.getRefreshToken());
         verify(verificationCodeService).deactivateVerificationCode(email);
     }
 
@@ -95,13 +113,14 @@ class AuthServiceTest {
         VerifyCodeResponse response = authService.verifyCode(request);
 
         assertNotNull(response);
-        assertNotNull(response.getToken());
+        assertNotNull(response.getAccessToken());
+        assertNotNull(response.getRefreshToken());
 
         // Verify the JWT token
         Claims claims = Jwts.parserBuilder()
                 .setSigningKey(Keys.hmacShaKeyFor(SECRET_KEY.getBytes(StandardCharsets.UTF_8)))
                 .build()
-                .parseClaimsJws(response.getToken())
+                .parseClaimsJws(response.getAccessToken())
                 .getBody();
 
         assertEquals(email, claims.getSubject());

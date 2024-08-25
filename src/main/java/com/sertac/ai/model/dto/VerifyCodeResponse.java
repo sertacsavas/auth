@@ -1,13 +1,19 @@
 package com.sertac.ai.model.dto;
 
 public class VerifyCodeResponse {
-    private final String token;
+    private String accessToken;
+    private String refreshToken;
 
-    public VerifyCodeResponse(String token) {
-        this.token = token;
+    public VerifyCodeResponse(String accessToken, String refreshToken) {
+        this.accessToken = accessToken;
+        this.refreshToken = refreshToken;
     }
 
-    public String getToken() {
-        return token;
+    public String getAccessToken() {
+        return accessToken;
+    }
+
+    public String getRefreshToken() {
+        return refreshToken;
     }
 }
